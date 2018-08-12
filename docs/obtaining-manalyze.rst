@@ -133,3 +133,13 @@ Some versions of CMake (for instance 3.0.2, present in Debian Jessie's repositor
 	-- Found OpenSSL: /usr/lib/x86_64-linux-gnu/libssl.so;/usr/lib/x86_64-linux-gnu/libcrypto.so (found version ".0.0`") 
 
 Upgrading CMake to the latest release (3.5.2 at the time I'm writing this) solves this issue.
+
+3. Incompatibilities between OpenSSL 1.1 and Boost
+--------------------------------------------------
+
+The following error may be encountered on Debian 9 (Stretch)::
+
+    In function ‘bool plugin::vt_api_interact(const string&, const string&, std::__cxx11::string&, plugin::sslsocket&)’: ~/Manalyze/plugins/plugin_virustotal/plugin_virustotal.cpp:276:84: error: ‘SSL_R_SHORT_READ’ was not declared in this scope if (error != boost::asio::error::eof && error.value() != ERR_PACK(ERR_LIB_SSL, 0, SSL_R_SHORT_READ))
+	
+Starting with Stretch, Debian ships with the 1.1 branch of OpenSSL which is `not compatible <https://github.com/chriskohlhoff/asio/issues/184>`_ with most versions of Boost. It is unclear from which version the problem has been fixed, but a workaround for this issue is to download one of the latest Boost distributions from upstream and build it instead of using the libraries provided by Debian.
+

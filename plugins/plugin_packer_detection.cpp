@@ -37,17 +37,58 @@ const std::vector<std::string> common_names = boost::assign::list_of(".text")
 																	(".idata")
 																	(".edata")
 																	(".pdata")
+                                                                    (".rodata")
 																	(".reloc")
 																	(".bss")
 																	(".tls")
 																	(".sxdata") // Apparently related to SafeSEH.
-																	(".gfids");
+																	(".gfids")
+                                                                    (".00cfg")
+                                                                    (".code")
+                                                                    (".CRT");
 
 // Also check for known packer section names (i.e. UPX0, etc.)
+// This list was updated with information from
+// http://www.hexacorn.com/blog/2016/12/15/pe-section-names-re-visited/
 const std::map<std::string, std::string> KNOWN_PACKER_SECTIONS =
 	boost::assign::map_list_of ("\\.ndata",	 "The PE is an NSIS installer")
-							   ("upx[0-9]", "The PE is packed with UPX")
-							   (".mpress[0-9]", "The PE is packed with mpress");
+							   ("\\.?(upx|UPX)[0-9!]", "The PE is packed with UPX")
+							   ("\\.(mpress|MPRESS)[0-9]", "The PE is packed with mpress")
+							   ("\\.[Aa][Ss][Pp]ack", "The PE is packed with Aspack")
+							   ("\\.ccg", "The PE is packed with CCG")
+                               ("\\.charmve|\\.pinclie", "The program is instrumented with PIN")
+                               ("BitArts", "The PE is packed with Crunch 2.0")
+                               ("DAStub", "The PE is packed with Dragon Armor")
+                               ("!EPack", "The PE is packed with Epack")
+                               ("\\.gentee", "The PE is a gentee installer")
+                               ("kkrunchy", "The PE is packed with kkrunchy")
+                               ("\\.mackt", "The PE was fixed by ImpREC")
+                               ("\\.MaskPE", "The PE is packed with MaskPE")
+                               ("MEW", "The PE is packed with MEW")
+                               ("\\.neolite?", "The PE is packed with Neolite")
+                               ("\\.nsp[012]", "The PE is packed with NsPack")
+                               ("\\.RLPack", "The PE is packed with RLPack")
+                               ("(pe|PE)([Bb]undle|[cC][12]([TM]O)?|Compact2)", "The PE is packed with PEBundle")
+                               ("PELOCKnt", "This PE is packed with PELock")
+                               ("\\.perplex", "This PE is packed with Perplex")
+                               ("PESHiELD", "This PE is packed with PEShield")
+                               ("\\.petite", "This PE is packed with Petite")
+                               ("ProCrypt", "This PE is packed with ProCrypt")
+                               (".rmnet", "This PE is packed with Ramnit")
+                               ("\\.RPCrypt||Rcryptor", "This PE is packed with RPCrypt")
+                               ("\\.seau", "This PE is packed with SeauSFX")
+                               ("\\.spack", "This PE is packed with Simple Pack (by bagie)")
+                               ("\\.svkp", "This PE is packed with SVKP")
+                               ("(\\.?Themida)|(WinLicen)", "This PE is packed with Themida")
+                               ("\\.tsu(arch|stub)", "This PE is packed with TSULoader")
+                               ("PEPACK!!", "This PE is packed with PEPack")
+                               ("\\.(Upack|ByDwing)", "This PE is packed with Upack")
+                               ("\\.vmp[012]", "This PE is packed with VMProtect")
+                               ("VProtect", "This PE is packed with VProtect")
+                               ("\\.winapi", "This PE was modified with API Override")
+                               ("_winzip_", "This PE is a WinZip self-extractor")
+                               ("\\.WWPACK", "This PE is packed with WWPACK")
+                               ("\\.y(P|0da)", "This PE is packed with Y0da");
 
 class PackerDetectionPlugin : public IPlugin
 {
@@ -59,7 +100,63 @@ public:
 	}
 
 	pString get_description() const override {
-		return boost::make_shared<std::string>("Tries to structurally detect packer presence");
+		return boost::make_shared<std::string>("Tries to structurally detect packer presence.");
+	}
+
+	void rich_header_tests(const mana::PE& pe, pResult res) const
+	{
+		auto rich = pe.get_rich_header();
+		if (!rich) {
+			return;
+		}
+
+		// Validate the checksum in the RICH header
+		boost::uint32_t checksum = rich->file_offset;
+		auto bytes = pe.get_raw_bytes(rich->file_offset);
+		// Checksum of the DOS header
+		for (unsigned int i = 0; i < rich->file_offset; ++i)
+		{
+			// Ignore e_lfanew.
+			if (0x3c <= i && i < 0x40) {
+				continue;
+			}
+			checksum += utils::rol32(bytes->at(i), i);
+		}
+		// Checksum of the @comp.ids.
+		for (unsigned int i = 0; i < rich->values.size(); ++i)
+		{
+			auto v = rich->values.at(i);
+			checksum += utils::rol32((std::get<0>(v) << 16) | std::get<1>(v), std::get<2>(v));
+		}
+
+		if (checksum != rich->xor_key)
+		{
+			res->raise_level(MALICIOUS);
+			if (res->get_summary() == nullptr) {
+				res->set_summary("The file headers were tampered with.");
+			}
+			res->add_information("The RICH header checksum is invalid.");
+		}
+
+		// Verify that the number of imports is consistent with the one reported in the header
+		for (auto it = rich->values.begin() ; it != rich->values.end() ; ++it)
+		{
+			// Look for the "Total imports" @comp.id.
+			if (std::get<0>(*it) == 1)
+			{
+				auto imports = pe.find_imports(".*");
+				// For some reason, the number of imports present here seems to be wrong in a lot of goodware.
+				// It seems however that that number is never smaller than the actual number of imports.
+				if (std::get<2>(*it) < imports->size())
+				{
+					if (res->get_summary() == nullptr) {
+						res->set_summary("The PE is packed or was manually edited.");
+					}
+					res->add_information("The number of imports reported in the RICH header is inconsistent.");
+					res->raise_level(SUSPICIOUS);
+				}
+			}
+		}
 	}
 
 	pResult analyze(const mana::PE& pe) override
@@ -88,12 +185,12 @@ public:
 			}
 
 			// Look for WX sections
-			int characteristics = (*it)->get_characteristics();
+			unsigned int characteristics = (*it)->get_characteristics();
 			if (characteristics & nt::SECTION_CHARACTERISTICS.at("IMAGE_SCN_MEM_EXECUTE") &&
 				characteristics & nt::SECTION_CHARACTERISTICS.at("IMAGE_SCN_MEM_WRITE"))
 			{
 				std::stringstream ss;
-				ss << "Section " << *(*it)->get_name() << " is both writable and executable";
+				ss << "Section " << *(*it)->get_name() << " is both writable and executable.";
 				res->add_information(ss.str());
 				res->raise_level(SUSPICIOUS);
 			}
@@ -107,7 +204,7 @@ public:
 			if (entropy > 7.)
 			{
 				std::stringstream ss;
-				ss << "Section " << *(*it)->get_name() << " has an unusually high entropy (" << entropy << ")";
+				ss << "Section " << *(*it)->get_name() << " has an unusually high entropy (" << entropy << ").";
 				res->raise_level(SUSPICIOUS);
 			}
 		}
@@ -119,11 +216,11 @@ public:
 		if (imports->size() == 1)
 		{
 			auto mscoree = pe.find_imported_dlls("mscoree.dll");
-			if (mscoree->size() > 0)
+			if (!mscoree->empty())
 			{
-				
+
 				auto corexemain = mscoree->at(0)->get_imports();
-				if (corexemain->size() > 0 && corexemain->at(0)->Name == "_CorExeMain") {
+				if (!corexemain->empty() && corexemain->at(0)->Name == "_CorExeMain") {
 					return res;
 				}
 			}
@@ -139,9 +236,9 @@ public:
 			try {
 				min_imports = std::stoi(_config->at("min_imports"));
 			}
-			catch (std::invalid_argument)
+			catch (std::invalid_argument&)
             {
-                PRINT_WARNING << "Could not parse packer-min_imports in the configuration file" << std::endl;
+                PRINT_WARNING << "Could not parse packer.min_imports in the configuration file." << std::endl;
 				min_imports = 10;
 			}
 		}
@@ -149,7 +246,7 @@ public:
 		if (imports->size() < min_imports)
 		{
 			std::stringstream ss;
-			ss << "The PE only has " << imports->size() << " import(s)";
+			ss << "The PE only has " << imports->size() << " import(s).";
 			res->add_information(ss.str());
 			res->raise_level(SUSPICIOUS);
 		}
@@ -163,12 +260,15 @@ public:
 		if (sum > pe.get_filesize())
 		{
 			res->raise_level(SUSPICIOUS);
-			res->add_information("The PE's resources are bigger than it is");
+			res->add_information("The PE's resources are bigger than it is.");
 		}
+
+		// Perform tests on the RICH header.
+		rich_header_tests(pe, res);
 
 		// Put a default summary if none was set.
 		if (res->get_level() != NO_OPINION && res->get_summary() == nullptr) {
-			res->set_summary("The PE is possibly packed");
+			res->set_summary("The PE is possibly packed.");
 		}
 
 		return res;

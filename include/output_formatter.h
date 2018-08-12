@@ -28,7 +28,6 @@ along with Manalyze.  If not, see <http://www.gnu.org/licenses/>.
 #include <boost/optional.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/cstdint.hpp>
-#include <boost/date_time.hpp>
 #include <boost/algorithm/string/trim.hpp>
 
 #include "manacommons/output_tree_node.h"
@@ -114,7 +113,7 @@ public:
 	*
 	*	@return	A boost::optional which may contain the located node, if it was found.
 	*/
-	pNode find_node(const std::string& name, const std::string file_path)
+	pNode find_node(const std::string& name, const std::string& file_path)
 	{
 		pNode file_node = _root->find_node(file_path);
 		if (!file_node) {
@@ -129,7 +128,7 @@ public:
 	 *	@brief	Dumps the formatted data into target output stream.
 	 *
 	 *	@param	std::ostream& sink	The output stream.
-	 *	@param	Whether the stream ends here. Set to false if more data should be appended later on.
+	 *	@param	Whether the stream ends here. Set to false if more data will be appended later on.
 	 *
 	 *	This last parameter was added because writing the output at the end may cause too much information
 	 *	to be stored in the RAM. Using end_stream enables the caller to flush the formatter's data from time
@@ -152,7 +151,7 @@ class RawFormatter : public OutputFormatter
 {
 
 public:
-	virtual void format(std::ostream& sink, bool end_stream = true);
+	void format(std::ostream& sink, bool end_stream = true) override;
 	typedef escaped_string_raw<sink_type> escape_grammar;
 
 private:
@@ -165,7 +164,7 @@ private:
 	 *			printing purposes).
 	 *	@param	int level The hierarchical level of the node to dump (higher is deeper in the tree).
 	 */
-	void _dump_node(std::ostream& sink, pNode node, int max_width = 0, int level = 0);
+	void _dump_node(std::ostream& sink, pNode node, size_t max_width = 0, int level = 0);
 
 	/**
 	 *	@brief	Special printing handling for plugin output.
@@ -187,7 +186,7 @@ private:
 	*			printing purposes).
 	*	@param	int level The hierarchical level of the node to dump (higher is deeper in the tree).
 	*/
-	void _dump_strings_node(std::ostream& sink, pNode node, int max_width = 0, int level = 0);
+	void _dump_strings_node(std::ostream& sink, pNode node, size_t max_width = 0, int level = 0);
 
 };
 
@@ -228,16 +227,5 @@ private:
 *	@return	A string containing the "translated" version number.
 */
 std::string uint64_to_version_number(boost::uint32_t msbytes, boost::uint32_t lsbytes);
-
-// ----------------------------------------------------------------------------
-
-/**
-*	@brief	Converts a POSIX timestamp into a human-readable string.
-*
-*	@param	uint32_t epoch_timestamp The timestamp to convert.
-*
-*	@return	A human readable string representing the given timestamp.
-*/
-std::string timestamp_to_string(boost::uint64_t epoch_timestamp);
 
 } // !namespace io

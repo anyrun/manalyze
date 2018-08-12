@@ -33,23 +33,29 @@ Section::Section(const image_section_header& header,
 		_number_of_relocations(header.NumberOfRelocations),
 		_number_of_line_numbers(header.NumberOfLineNumbers),
 		_characteristics(header.Characteristics),
-		_file_handle(handle),
+		_file_handle(std::move(handle)),
 		_file_size(file_size)
 {
-	_name = std::string((char*) header.Name);
+	_name = std::string((char*) header.Name, 8);
+	boost::trim_right_if(_name, [](char c) { return c == '\x00'; }); // Trim the string for \0 characters.
+
 	pString escaped = io::escape(_name);
 	if (escaped != nullptr)	{
 		_name = *escaped;
 	}
 
-	if (_name.size() > 0 && _name[0] == '/')
+	if (!_name.empty() && _name[0] == '/')
 	{
 		std::stringstream ss;
 		unsigned int index;
-		ss << header.Name + 1; // Skip the trailing "/"
+		ss << _name.substr(1); // Skip the trailing "/"
 		ss >> index;
 
-		if (index >= coff_string_table.size()) {
+		if (ss.fail()) {
+			PRINT_WARNING << "Found a non-integer index of the COFF string table (" << _name << "). This PE "
+					         "was almost certainly manually crafted." << std::endl;
+		}
+		else if (index >= coff_string_table.size()) {
 			PRINT_WARNING << "Tried to read outside the COFF string table to get the name of section " << _name << "!" << std::endl;
 		}
 		else {
@@ -117,22 +123,22 @@ bool is_address_in_section(boost::uint64_t rva, mana::pSection section, bool che
 mana::pSection find_section(unsigned int rva, const std::vector<mana::pSection>& section_list)
 {
 	mana::pSection res = mana::pSection();
-	for (auto it = section_list.begin() ; it != section_list.end() ; ++it)
+	for (const auto& it : section_list)
 	{
-		if (is_address_in_section(rva, *it))
+		if (is_address_in_section(rva, it))
 		{
-			res = *it;
+			res = it;
 			break;
 		}
 	}
 
 	if (!res) // VirtualSize may be erroneous. Check with RawSizeofData.
 	{
-		for (auto it = section_list.begin() ; it != section_list.end() ; ++it)
+		for (const auto& it : section_list)
 		{
-			if (is_address_in_section(rva, *it, true))
+			if (is_address_in_section(rva, it, true))
 			{
-				res = *it;
+				res = it;
 				break;
 			}
 		}

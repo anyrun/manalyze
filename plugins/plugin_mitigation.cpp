@@ -29,7 +29,7 @@ class ExploitMitigationsPlugin : public IPlugin
     }
 
     pString get_description() const override {
-        return boost::make_shared<std::string>("Displays the enabled exploit mitigation techniques (DEP, ASLR, etc)");
+        return boost::make_shared<std::string>("Displays the enabled exploit mitigation techniques (DEP, ASLR, etc.).");
     }
 
     pResult analyze(const mana::PE& pe) override
@@ -92,6 +92,16 @@ class ExploitMitigationsPlugin : public IPlugin
         if (res->get_information()->size() > 0) {
             res->set_summary("The following exploit mitigation techniques have been detected");
         }
+
+		// CFG
+		if (std::find(characteristics.begin(), characteristics.end(), "IMAGE_DLLCHARACTERISTICS_GUARD_CF") !=
+			characteristics.end()) {
+			res->add_information("CFG", "enabled");
+		}
+		else {
+			res->add_information("CFG", "disabled");
+		}
+
         return res;
     }
 };

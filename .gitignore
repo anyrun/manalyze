@@ -25,11 +25,15 @@
 *.app
 bin/manalyze
 bin/manalyze-tests
+bin/hash-library-test
 
 # Compiled Yara rules + ClamAV rules and databases
 *.yarac
 bin/yara_rules/clamav.*
+bin/yara_rules/daily.tar
 bin/yara_rules/*.cvd
+bin/yara_rules/*.ndb
+bin/yara_rules/*.ldb
 
 # Compiled Python scripts
 bin/yara_rules/*.pyc
@@ -39,6 +43,9 @@ CMakeFiles
 CMakeCache.txt
 *.cmake
 Makefile
+*.cbp
+
+# Linux compilation artifacts
 
 # VS Files
 *.vcxproj*
@@ -49,9 +56,12 @@ Makefile
 *.suo
 *.ilk
 *.opendb
+*.db
 Win32
 Release
 Debug
+.vs
+.vscode
 
 # Intellij IDEA project files
 .idea
@@ -66,10 +76,7 @@ docs/.*
 docs/html
 
 # Malwares and documentation
-resources/*.mal
-resources/*.bin
-resources/*.pdf
-resources/*.docx?
+resources/*
 
 # Third-party libraries
 external/

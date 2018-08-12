@@ -445,8 +445,11 @@ const flag_dict BASE_RELOCATION_TYPES =
 							   ("IMAGE_REL_BASED_LOW",					2)
 							   ("IMAGE_REL_BASED_HIGHLOW",				3)
 							   ("IMAGE_REL_BASED_HIGHADJ",				4)
+							   ("IMAGE_REL_BASED_MIPS_JMPADDR",			5)
+							   ("RESERVED",								6)
+							   ("IMAGE_REL_BASED_THUMB_MOV32",			7)
+							   ("IMAGE_REL_BASED_RISCV_LOW12S",			8)
 							   ("IMAGE_REL_BASED_MIPS_JMPADDR16",		9)
-							   ("IMAGE_REL_BASED_IA64_IMM64",			9)
 							   ("IMAGE_REL_BASED_DIR64",				10);
 
 // ----------------------------------------------------------------------------
@@ -508,13 +511,144 @@ const flag_dict HEAP_FLAGS =
 
 // ----------------------------------------------------------------------------
 
+const flag_dict GUARD_FLAGS =
+	boost::assign::map_list_of	("IMAGE_GUARD_CF_INSTRUMENTED",						0x00000100)
+								("IMAGE_GUARD_CFW_INSTRUMENTED",					0x00000200)
+								("IMAGE_GUARD_CF_FUNCTION_TABLE_PRESENT",			0x00000400)
+								("IMAGE_GUARD_SECURITY_COOKIE_UNUSED",				0x00000800)
+								("IMAGE_GUARD_PROTECT_DELAYLOAD_IAT",				0x00001000)
+								("IMAGE_GUARD_DELAYLOAD_IAT_IN_ITS_OWN_SECTION",	0x00002000)
+								("IMAGE_GUARD_CF_EXPORT_SUPPRESSION_INFO_PRESENT",	0x00004000)
+								("IMAGE_GUARD_CF_ENABLE_EXPORT_SUPPRESSION",		0x00008000)
+								("IMAGE_GUARD_CF_LONGJUMP_TABLE_PRESENT",			0x00010000)
+								("IMAGE_GUARD_CF_FUNCTION_TABLE_SIZE_MASK ",		0xF0000000);
+
+// ----------------------------------------------------------------------------
+
+// Source: https://github.com/dishather/richprint/blob/master/comp_id.txt
+// The strings cannot be used as keys here are there are multiple identical values.
+const std::map<int, std::string> COMP_ID_TYPE =
+	boost::assign::map_list_of	(0x000, "Unmarked objects")
+								(0x001, "Total imports")
+								(0x002, "Imports")
+								(0x004, "Linker")
+								(0x006, "Resource objects")
+								(0x00A, "C objects")
+								(0x00B, "C++ objects")
+								(0x00F, "ASM objects")
+								(0x015, "C objects")
+								(0x016, "C++ objects")
+								(0x019, "Imports")
+								(0x01C, "C objects")
+								(0x01D, "C++ objects")
+								(0x03D, "Linker")
+								(0x03F, "Exports")
+								(0x040, "ASM objects")
+								(0x045, "Resource objects")
+								(0x05A, "Linker")
+								(0x05C, "Exports")
+								(0x05D, "Imports")
+								(0x05F, "C objects")
+								(0x060, "C++ objects")
+								(0x06D, "C objects")
+								(0x06E, "C++ objects")
+								(0x078, "Linker")
+								(0x07C, "Resource objects")
+								(0x07A, "Exports")
+								(0x07B, "Imports")
+								(0x07D, "ASM objects")
+								(0x083, "C objects")
+								(0x084, "C++ objects")
+								(0x091, "Resource objects")
+								(0x092, "Exports")
+								(0x093, "Imports")
+								(0x094, "Linker")
+								(0x095, "ASM objects")
+								(0x09A, "Resource objects")
+								(0x09B, "Exports")
+								(0x09C, "Imports")
+								(0x09D, "Linker")
+								(0x09E, "ASM objects")
+								(0x0AA, "C objects")
+								(0x0AB, "C++ objects")
+								(0x0C9, "Resource objects")
+								(0x0CA, "Exports")
+								(0x0CB, "Imports")
+								(0x0CC, "Linker")
+								(0x0CD, "ASM objects")
+								(0x0CE, "C objects")
+								(0x0CF, "C++ objects")
+								(0x0DB, "Resource objects")
+								(0x0DC, "Exports")
+								(0x0ED, "Imports")
+								(0x0DE, "Linker")
+								(0x0DF, "ASM objects")
+								(0x0E0, "C objects")
+								(0x0E1, "C++ objects")
+								(0x0FF, "Resource objects")
+								(0x100, "Exports")
+								(0x101, "Imports")
+								(0x102, "Linker")
+								(0x103, "ASM objects")
+								(0x104, "C objects")
+								(0x105, "C++ objects");
+
+// ----------------------------------------------------------------------------
+
+const flag_dict COMP_ID_PRODID =
+	boost::assign::map_list_of	("VS97 SP3 link 5.10.7303",							0x1c87)
+								("VS97 SP3 cvtres 5.00.1668",						0x0684)
+								("VS98 cvtres build 1720",							0x06b8)
+								("VS98 build 8168",									0x1fe8)
+								("VS98 SP6 cvtres build 1736",						0x06c7)
+								("VC++ 6.0 SP5 imp/exp build 8447",					0x20ff)
+								("VC++ 6.0 SP5 build 8804",							0x2306)
+								("VS98 SP6 build 8804",								0x2636)
+								("VS2002 (.NET) build 9466",						0x24fa)
+								("VS2003 (.NET) build 3052",						0x0bec)
+								("VS2003 (.NET) build 3077",						0x0c05)
+								("VS2003 (.NET) build 4035",						0x0fc3)
+								("VS2003 (.NET) SP1 build 6030",					0x178e)
+								("VS2008 build 21022",								0x521e)
+								("VS2008 SP1 build 30729",							0x7809)
+								("VS2010 build 30319",								0x766f)
+								("VS2010 SP1 build 40219",							0x9d1b)
+								("VS2012 build 50727 / VS2005 build 50727",			0xc627)
+								("VS2012 UPD1 build 51106",							0xc7a2)
+								("VS2012 UPD2 build 60315",							0xeb9b)
+								("VS2012 UPD3 build 60610",							0xecc2)
+								("VS2012 UPD4 build 61030",							0xee66)
+								("VS2013 build 21005",								0x520d)
+								("VS2013 UPD2 build 30501",							0x7725)
+								("VS2013 UPD3 build 30723",							0x7803)
+								("VS2013 UPD4 build 31101",							0x797d)
+								("VS2013 UPD5 build 40629",							0x9eb5)
+								("VS2015 build 23026",								0x59f2)
+								("VS2015 UPD1 build 23506",							0x5bd2)
+								("VS2015 UPD2 build 23918",							0x5d6e)
+								("VS2015 UPD3 build 24123",							0x5e3b)
+								("VS2015 UPD3 build 24210",							0x5e92)
+								("VS2015 UPD3 build 24213",							0x5e95)
+								("VS2015 UPD3.1 build 24215",						0x5e97)
+								("VS2017 v15.?.? build 25203",						0x6273)
+								("VS2017 v15.4.2 build 25547",						0x63cb)
+								("VS2017 v15.5.4 build 25834",						0x64ea)
+								("VS2017 v15.?.? build 25930",						0x654a)
+								("VS2017 v15.6.5 build 26129",						0x6611)
+								("VS2017 v15.6.6 build 26129",						0x6613)
+								("VS2017 v15.7.4 build 26431",						0x673F)
+								("VS2017 v15.7.5 build 26433",						0x6741)
+	;
+
+// ----------------------------------------------------------------------------
+
 const_shared_strings translate_to_flags(int value, const flag_dict& dict)
 {
 	auto res = boost::make_shared<std::vector<std::string> >();
-	for (auto it = dict.begin() ; it != dict.end() ; ++it)
+	for (const auto& it : dict)
 	{
-		if ((value & it->second) != 0) { // The flag is present in the value
-			res->push_back(it->first);
+		if ((value & it.second) != 0) { // The flag is present in the value
+			res->push_back(it.first);
 		}
 	}
 	return res;
@@ -524,10 +658,10 @@ const_shared_strings translate_to_flags(int value, const flag_dict& dict)
 
 pString translate_to_flag(int value, const flag_dict& dict)
 {
-	for (auto it = dict.begin() ; it != dict.end() ; ++it)
+	for (const auto& it : dict)
 	{
-		if (value == it->second) {
-			return boost::make_shared<std::string>(it->first);
+		if (value == it.second) {
+			return boost::make_shared<std::string>(it.first);
 		}
 	}
     #ifdef _DEBUG

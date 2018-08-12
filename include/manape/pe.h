@@ -70,6 +70,7 @@ typedef boost::shared_ptr<const image_load_config_directory> shared_config;
 typedef boost::shared_ptr<const delay_load_directory_table> shared_dldt;
 typedef boost::shared_ptr<const std::vector<pwin_certificate> > shared_certificates;
 typedef boost::shared_ptr<const std::vector<pImportedLibrary> > shared_imports;
+typedef boost::shared_ptr<const rich_header> shared_rich_header;
 typedef boost::shared_ptr<std::string> pString;
 typedef boost::shared_ptr<FILE> pFile;
 
@@ -149,6 +150,15 @@ public:
 											   const std::string& dll_name_regexp = ".*",
 											   bool  case_sensitivity = false) const;
 
+	/**
+	*	@brief	Translates a Relative Virtual Address into an offset in the file.
+	*
+	*	@param	boost::uint32_t rva The RVA to translate
+	*
+	*	@return	The corresponding offset in the file, or 0 if the RVA could not be translated.
+	*/
+	DECLSPEC unsigned int rva_to_offset(boost::uint64_t rva) const;
+
 	DECLSPEC boost::optional<dos_header> get_dos_header() const {
 		return _h_dos;
 	}
@@ -197,6 +207,11 @@ public:
 			boost::make_shared<shared_certificates::element_type>();
 	}
 
+	DECLSPEC shared_rich_header get_rich_header() const	{
+		return (_initialized && _rich_header) ?
+			boost::make_shared<rich_header>(*_rich_header) : shared_rich_header();
+	}
+
 	DECLSPEC shared_imports get_imports() const	{
 		return (_initialized) ? boost::make_shared<std::vector<pImportedLibrary> >(_imports) : shared_imports();
 	}
@@ -218,6 +233,18 @@ public:
 	DECLSPEC bool is_valid()	const {
 		return _initialized;
 	}
+
+	/**
+	 *	@brief	Provides direct access to the file's bytes.
+	 *
+	 *	/!\ Warning: the whole file will be loaded in memory!
+	 *
+	 *	@param	boost::uint64_t size If specified, only the [size] first bytes of the file
+	 *			will be provided. By default, the whole file is read.
+	 *
+	 *	@return	A vector containing the bytes of the file.
+	*/
+	DECLSPEC shared_bytes get_raw_bytes(size_t size = INT_MAX) const;
 
 	/**
 	 *	@brief	The delete operator. "new" had to be re-implemented in order to make it private.
@@ -368,13 +395,12 @@ private:
 	bool _parse_certificates();
 
 	/**
-	 *	@brief	Translates a Relative Virtual Address into an offset in the file.
-	 *
-	 *	@param	boost::uint32_t rva The RVA to translate
-	 *
-	 *	@return	The corresponding offset in the file, or 0 if the RVA could not be translated.
+	 *	@brief	Parses the opaque RICH header.
+	 *	
+	 *	Included in the _parse_directories call.
+	 *	/!\ This relies on the information gathered in _parse_pe_header.
 	 */
-	unsigned int _rva_to_offset(boost::uint64_t rva) const;
+	bool _parse_rich_header();
 
 	/**
 	 *	@brief	Translates a Virtual Address (*not relative to the image base*) into an offset in the file.
@@ -435,6 +461,7 @@ private:
 	boost::optional<image_load_config_directory>	_config;
 	boost::optional<delay_load_directory_table>		_delay_load_directory_table;
 	std::vector<pwin_certificate>					_certificates;
+	boost::optional<rich_header>					_rich_header;
 };
 
 

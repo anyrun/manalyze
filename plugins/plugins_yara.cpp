@@ -19,8 +19,8 @@
 // The structure used to communicate with the yara ManaPE module.
 #include "yara/modules/manape_data.h"
 
-// TODO: Remove when Yara doesn't mask get_object anymore
-#undef get_object
+// Used to validate bitcoin addresses.
+#include "hash-library/bitcoin.h"
 
 #include "plugin_framework/plugin_interface.h"
 #include "plugin_framework/auto_register.h"
@@ -29,16 +29,13 @@ namespace plugin
 {
 
 
-
 // Provide a destructor for the structure sent to Yara.
 void delete_manape_module_data(manape_data* data)
 {
-    if (data != nullptr && data->sections != nullptr) {
+    if (data != nullptr) {
         free(data->sections);
     }
-    if (data != nullptr) {
-        delete data;
-    }
+	delete data;
 }
 
 // ----------------------------------------------------------------------------
@@ -47,21 +44,27 @@ class YaraPlugin : public IPlugin
 {
 
 public:
-	YaraPlugin(const std::string& rule_file) : _rule_file(rule_file) {}
+	YaraPlugin(std::string rule_file) : _rule_file(std::move(rule_file)) {}
 
 	/**
 	 *	@brief	Helper function designed to generically prepare a result based on a Yara scan.
 	 *
-	 *	@param	const mana::PE& pe The PE to scan.
-	 *	const std::string& summary The summary to set if there is a match.
-	 *	Result::LEVEL level The threat level to set if there is a match.
-	 *	const std::string& meta_field_name The meta field name (of the yara rule) to query to
+	 *	@param	pe The PE to scan.
+	 *	@param	summary The summary to set if there is a match.
+	 *	@param	level The threat level to set if there is a match.
+	 *	@param	meta_field_name The meta field name (of the yara rule) to query to
 	 *									   extract results.
-	 *	bool show_strings Adds the matched strings/patterns to the result.
+	 *	@param	show_strings Adds the matched strings/patterns to the result.
+	 *	@param	callback A post-processing function to accept or reject matches.
 	 *
 	 *	@return	A pResult detailing the findings of the scan.
 	 */
-	pResult scan(const mana::PE& pe, const std::string& summary, LEVEL level, const std::string& meta_field_name, bool show_strings = false)
+	pResult scan(const mana::PE& pe, 
+				 const std::string& summary, 
+				 LEVEL level, 
+				 const std::string& meta_field_name,
+				 bool show_strings = false,
+				 bool (*callback)(const std::string&) = nullptr)
 	{
 		pResult res = create_result();
 		if (!_load_rules()) {
@@ -69,26 +72,43 @@ public:
 		}
 
 		yara::const_matches m = _engine.scan_file(*pe.get_path(), _create_manape_module_data(pe));
-		if (m && m->size() > 0)
+		if (m && !m->empty())
 		{
-			res->set_level(level);
-			res->set_summary(summary);
-			for (yara::match_vector::const_iterator it = m->begin() ; it != m->end() ; ++it)
+			bool found_valid = false;  // False as long as a valid string hasn't been found
+			for (const auto& it : *m)
 			{
+				// Filter matches based on the input predicate if one was given.
+				auto found = it->get_found_strings();
+				if (callback != nullptr)
+				{
+					std::set<std::string> found_filtered;
+					std::copy_if(found.begin(), found.end(), std::inserter(found_filtered, found_filtered.end()), callback);
+					found = found_filtered;
+				}
+				if (found.empty()) {
+					continue;
+				}
+
+				found_valid = true;
 				if (!show_strings) {
-					res->add_information((*it)->operator[](meta_field_name));
+					res->add_information(it->operator[](meta_field_name));
 				}
 				else
 				{
-					io::pNode output = boost::make_shared<io::OutputTreeNode>((*it)->operator[](meta_field_name),
+					io::pNode output = boost::make_shared<io::OutputTreeNode>(it->operator[](meta_field_name),
 						io::OutputTreeNode::STRINGS, io::OutputTreeNode::NEW_LINE);
 
-					std::set<std::string> found = (*it)->get_found_strings();
-					for (auto it2 = found.begin() ; it2 != found.end() ; ++it2) {
-						output->append(*it2);
+					for (const auto& it2 : found) {
+						output->append(it2);
 					}
 					res->add_information(output);
 				}
+			}
+
+			if (found_valid)
+			{
+				res->set_level(level);
+				res->set_summary(summary);
 			}
 		}
 
@@ -120,9 +140,10 @@ private:
 	 *	The manape_data object contains address information (entry point, sections, ...). Passing them to Yara prevents
 	 *	me from using their built in PE parser (since manalyze has already done all the work).
 	 */
-	boost::shared_ptr<manape_data> _create_manape_module_data(const mana::PE& pe)
+	static boost::shared_ptr<manape_data> _create_manape_module_data(const mana::PE& pe)
 	{
         boost::shared_ptr<manape_data> res(new manape_data, delete_manape_module_data);
+		memset(res.get(), 0, sizeof(manape_data));
         auto ioh = pe.get_image_optional_header();
         auto sections = pe.get_sections();
 
@@ -138,7 +159,7 @@ private:
         else
         {
             res->number_of_sections = sections->size();
-            res->sections = (manape_file_portion*) malloc(res->number_of_sections * sizeof(manape_file_portion));
+            res->sections = static_cast<manape_file_portion*>(malloc(res->number_of_sections * sizeof(manape_file_portion)));
             if (res->sections != nullptr)
             {
                 for (boost::uint32_t i = 0 ; i < res->number_of_sections ; ++i)
@@ -156,20 +177,33 @@ private:
         }
 
         // Add VERSION_INFO location for some ClamAV signatures
-        auto resources = pe.get_resources();
-        for (auto it = resources->begin() ; it != resources->end() ; ++it)
-        {
-            if (*(*it)->get_type() == "RT_VERSION")
-            {
-                res->version_info.start = (*it)->get_offset();
-                res->version_info.size = (*it)->get_size();
-                break;
-            }
-        }
+        const auto resources = pe.get_resources();
+		if (resources != nullptr)
+		{
+			for (auto& it : *resources)
+			{
+				if (*it->get_type() == "RT_VERSION")
+				{
+					res->version_info.start = it->get_offset();
+					res->version_info.size = it->get_size();
+					break;
+				}
+			}
+		}
+
+		// Add authenticode signature location for the findcrypt rules.
+		if (ioh)
+		{
+			res->authenticode.start = ioh->directories[IMAGE_DIRECTORY_ENTRY_SECURITY].VirtualAddress;
+			res->authenticode.size = ioh->directories[IMAGE_DIRECTORY_ENTRY_SECURITY].Size;
+		}
+
         return res;
 	}
 
 };
+
+// ----------------------------------------------------------------------------
 
 class ClamavPlugin : public YaraPlugin
 {
@@ -185,7 +219,7 @@ public:
 	}
 
 	pString  get_description() const override {
-		return boost::make_shared<std::string>("Scans the binary with ClamAV virus definitions");
+		return boost::make_shared<std::string>("Scans the binary with ClamAV virus definitions.");
 	}
 
 private:
@@ -195,18 +229,20 @@ private:
 	 *
 	 *	@return	Whether the rules were loaded successfully.
 	 */
-	virtual bool _load_rules() override
+	bool _load_rules() override
 	{
 		if (!_engine.load_rules(_rule_file))
 		{
 			PRINT_ERROR << "ClamAV rules haven't been generated yet!" << std::endl;
 			PRINT_ERROR << "Please run yara_rules/update_clamav_signatures.py to create them, "
-				"and refer to the documentation for additional information" << std::endl;
+				"and refer to the documentation for additional information." << std::endl;
 			return false;
 		}
 		return true;
 	}
 };
+
+// ----------------------------------------------------------------------------
 
 class CompilerDetectionPlugin : public YaraPlugin
 {
@@ -222,7 +258,7 @@ public:
 	}
 
 	boost::shared_ptr<std::string> get_description() const override {
-		return boost::make_shared<std::string>("Tries to determine which compiler generated the binary");
+		return boost::make_shared<std::string>("Tries to determine which compiler generated the binary.");
 	}
 };
 
@@ -240,10 +276,11 @@ public:
 	}
 
 	boost::shared_ptr<std::string> get_description() const override {
-		return boost::make_shared<std::string>("Returns the PEiD signature of the binary");
+		return boost::make_shared<std::string>("Returns the PEiD signature of the binary.");
 	}
 };
 
+// ----------------------------------------------------------------------------
 
 class SuspiciousStringsPlugin : public YaraPlugin
 {
@@ -259,9 +296,11 @@ public:
 	}
 
 	boost::shared_ptr<std::string> get_description() const override {
-		return boost::make_shared<std::string>("Looks for suspicious strings (anti-VM, process names)");
+		return boost::make_shared<std::string>("Looks for suspicious strings (anti-VM, process names...).");
 	}
 };
+
+// ----------------------------------------------------------------------------
 
 class FindCryptPlugin : public YaraPlugin
 {
@@ -273,16 +312,16 @@ public:
 		pResult res = scan(pe, "Cryptographic algorithms detected in the binary:", NO_OPINION, "description");
 
 		// Look for common cryptography libraries
-		if (pe.find_imports(".*", "libssl(32)?.dll|libcrypto.dll")->size() > 0) {
+		if (!pe.find_imports(".*", "libssl(32)?.dll|libcrypto.dll")->empty()) {
 			res->add_information("OpenSSL");
 		}
-		if (pe.find_imports(".*", "cryptopp.dll")->size() > 0) {
+		if (!pe.find_imports(".*", "cryptopp.dll")->empty()) {
 			res->add_information("Crypto++");
 		}
-		if (pe.find_imports(".*", "botan.dll")->size() > 0) {
+		if (!pe.find_imports(".*", "botan.dll")->empty()) {
 			res->add_information("Botan");
 		}
-		if (pe.find_imports("Crypt(.*)")->size() > 0) {
+		if (!pe.find_imports("Crypt(.*)")->empty()) {
 			res->add_information("Microsoft's Cryptography API");
 		}
 
@@ -299,14 +338,39 @@ public:
 	}
 
 	boost::shared_ptr<std::string> get_description() const override {
-		return boost::make_shared<std::string>("Detects embedded cryptographic constants");
+		return boost::make_shared<std::string>("Detects embedded cryptographic constants.");
 	}
 };
+
+// ----------------------------------------------------------------------------
+
+class FindBTCAddressPlugin : public YaraPlugin
+{
+public:
+	FindBTCAddressPlugin() : YaraPlugin("yara_rules/bitcoin.yara") {}
+
+	pResult analyze(const mana::PE& pe) override {
+		return scan(pe, "This program may be a ransomware.", MALICIOUS, "description", true, hash::test_btc_address);
+	}
+
+	boost::shared_ptr<std::string> get_id() const override {
+		return boost::make_shared<std::string>("btcaddress");
+	}
+
+	boost::shared_ptr<std::string> get_description() const override {
+		return boost::make_shared<std::string>("Looks for valid Bitcoin addresses in the binary.");
+	}
+};
+
+// ----------------------------------------------------------------------------
+// Auto-registration for built-in plugins
+// ----------------------------------------------------------------------------
 
 AutoRegister<ClamavPlugin> auto_register_clamav;
 AutoRegister<CompilerDetectionPlugin> auto_register_compiler;
 AutoRegister<PEiDPlugin> auto_register_peid;
 AutoRegister<SuspiciousStringsPlugin> auto_register_strings;
 AutoRegister<FindCryptPlugin> auto_register_findcrypt;
+AutoRegister<FindBTCAddressPlugin> auto_register_btcaddress;
 
 }

@@ -144,7 +144,7 @@ bool validate_args(po::variables_map& vm, po::options_description& desc, char** 
 	{
 		std::vector<std::string> selected_categories = tokenize_args(vm["dump"].as<std::vector<std::string> >());
 		const std::vector<std::string> categories = boost::assign::list_of("all")("summary")("dos")("pe")("opt")("sections")
-			("imports")("exports")("resources")("version")("debug")("tls")("config")("delay");
+			("imports")("exports")("resources")("version")("debug")("tls")("config")("delay")("rich");
 		for (auto it = selected_categories.begin() ; it != selected_categories.end() ; ++it)
 		{
 			std::vector<std::string>::const_iterator found = std::find(categories.begin(), categories.end(), *it);
@@ -233,7 +233,7 @@ bool parse_args(po::variables_map& vm, int argc, char**argv)
 			"Dump PE information. Available choices are any combination of: "
 			"all, summary, dos (dos header), pe (pe header), opt (pe optional header), sections, "
 			"imports, exports, resources, version, debug, tls, config (image load configuration), "
-			"delay (delay-load table")
+			"delay (delay-load table), rich")
 		("hashes", "Calculate various hashes of the file (may slow down the analysis!)")
 		("extract,x", po::value<std::string>(), "Extract the PE resources and authenticode certificates "
 			"to the target directory.")
@@ -331,6 +331,9 @@ void handle_dump_option(io::OutputFormatter& formatter, const std::vector<std::s
 	}
 	if (dump_all || std::find(categories.begin(), categories.end(), "delay") != categories.end()) {
 		mana::dump_dldt(pe, formatter);
+	}
+	if (dump_all || std::find(categories.begin(), categories.end(), "rich") != categories.end()) {
+		mana::dump_rich_header(pe, formatter);
 	}
 }
 
@@ -525,6 +528,9 @@ int main(int argc, char** argv)
 	// Load the dynamic plugins.
 	bfs::path working_dir(argv[0]);
 	working_dir = working_dir.parent_path();
+	if (working_dir.empty()) {	// cmd.exe does not provide the full path to the executable.
+		working_dir = ".";		// Running ./manalyze.exe results in working_dir being empty,
+	}							// which makes this additional check necessary.
 
 	// Linux: look for the configuration file in /etc/manalyze if
 	// nothing is found in the current folder.

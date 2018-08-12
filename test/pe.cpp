@@ -65,9 +65,35 @@ BOOST_AUTO_TEST_CASE(parse_testfile)
     mana::PE pe("testfiles/manatest.exe");
 	BOOST_CHECK_EQUAL(pe.get_filesize(), 16360);
 	BOOST_ASSERT(pe.is_valid());
+	BOOST_ASSERT(pe.get_path());
+	BOOST_CHECK_EQUAL(*pe.get_path(), "testfiles/manatest.exe");
 	mana::PE pe2("testfiles/manatest2.exe");
 	BOOST_CHECK_EQUAL(pe2.get_filesize(), 72704);
 	BOOST_ASSERT(pe2.is_valid());
+	BOOST_ASSERT(pe2.get_path());
+	BOOST_CHECK_EQUAL(*pe2.get_path(), "testfiles/manatest2.exe");
+}
+
+// ----------------------------------------------------------------------------
+
+BOOST_AUTO_TEST_CASE(get_raw_bytes)
+{
+	mana::PE pe("testfiles/manatest.exe");
+	auto bytes = pe.get_raw_bytes();
+	BOOST_CHECK_EQUAL(bytes->size(), 16360);
+	BOOST_CHECK_EQUAL(bytes->at(0), 'M');
+	BOOST_CHECK_EQUAL(bytes->at(1), 'Z');
+	BOOST_CHECK_EQUAL(bytes->at(16359), '\x00');
+	BOOST_CHECK_EQUAL(bytes->at(16358), '\x00');
+	BOOST_CHECK_EQUAL(bytes->at(16357), '\x00');
+	BOOST_CHECK_EQUAL(bytes->at(16356), '\x00');
+	BOOST_CHECK_EQUAL(bytes->at(16355), '\x0B');
+	BOOST_CHECK_EQUAL(bytes->at(16354), '\x7C');
+
+	bytes = pe.get_raw_bytes(0x80);
+	BOOST_CHECK_EQUAL(bytes->size(), 0x80);
+	std::string s(&(*bytes)[0x4E], &(*bytes)[0x75]);
+	BOOST_CHECK_EQUAL(s, "This program cannot be run in DOS mode.");
 }
 
 // ----------------------------------------------------------------------------
@@ -359,6 +385,34 @@ BOOST_AUTO_TEST_CASE(parse_delayed_imports)
 	BOOST_CHECK_EQUAL(lib->get_type(), mana::ImportedLibrary::DELAY_LOADED);
 	BOOST_CHECK(lib->get_image_import_descriptor() == nullptr); // No image import descriptor for delay-loaded DLLs.
 	BOOST_CHECK_EQUAL(lib->get_imports()->size(), 1);
+}
+
+// ----------------------------------------------------------------------------
+
+BOOST_AUTO_TEST_CASE(parse_rich_header)
+{
+	mana::PE pe("testfiles/manatest.exe");
+	auto rich = pe.get_rich_header();
+	BOOST_ASSERT(rich != nullptr);
+	BOOST_CHECK_EQUAL(rich->xor_key, 0x374baddd);
+	BOOST_CHECK_EQUAL(rich->file_offset, 0x80);
+	BOOST_CHECK_EQUAL(rich->values.size(), 11);
+
+	BOOST_CHECK_EQUAL(std::get<0>(rich->values.at(0)),  0);
+	BOOST_CHECK_EQUAL(std::get<1>(rich->values.at(0)),  0);
+	BOOST_CHECK_EQUAL(std::get<2>(rich->values.at(0)),  0);
+	BOOST_CHECK_EQUAL(std::get<0>(rich->values.at(1)),  0x0093);
+	BOOST_CHECK_EQUAL(std::get<1>(rich->values.at(1)),  0x7809);
+	BOOST_CHECK_EQUAL(std::get<2>(rich->values.at(1)),  0xa);
+	BOOST_CHECK_EQUAL(std::get<0>(rich->values.at(2)),  0x0103);
+	BOOST_CHECK_EQUAL(std::get<1>(rich->values.at(2)),  0x5b6e);
+	BOOST_CHECK_EQUAL(std::get<2>(rich->values.at(2)),  1);
+	BOOST_CHECK_EQUAL(std::get<0>(rich->values.at(3)),  0x105);
+	BOOST_CHECK_EQUAL(std::get<1>(rich->values.at(3)),  0x5b6e);
+	BOOST_CHECK_EQUAL(std::get<2>(rich->values.at(3)),  17);
+	BOOST_CHECK_EQUAL(std::get<0>(rich->values.at(10)), 0x0102);
+	BOOST_CHECK_EQUAL(std::get<1>(rich->values.at(10)), 0x5bd2);
+	BOOST_CHECK_EQUAL(std::get<2>(rich->values.at(10)), 1);
 }
 
 // ----------------------------------------------------------------------------
