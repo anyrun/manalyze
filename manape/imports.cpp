@@ -32,7 +32,7 @@ bool PE::_parse_hint_name_table(pimport_lookup_table import) const
 	{
 		// Import by name. Read the HINT/NAME table. For both PE32 and PE32+, its RVA is stored
 		// in bits 30-0 of AddressOfData.
-		unsigned int table_offset = rva_to_offset(import->AddressOfData & 0x7FFFFFFF);
+		unsigned int table_offset = _rva_to_offset(import->AddressOfData & 0x7FFFFFFF);
 		if (table_offset == 0)
 		{
 			PRINT_ERROR << "Could not reach the HINT/NAME table." << std::endl;
@@ -123,7 +123,7 @@ bool PE::_parse_imports()
 		}
 
 		// Non-standard parsing. The Name RVA is translated to an actual string here.
-		auto offset = rva_to_offset(iid->Name);
+		auto offset = _rva_to_offset(iid->Name);
 		if (!offset) { // Try to use the RVA as a direct address if the imports are outside of a section.
 			offset = iid->Name;
 		}
@@ -158,10 +158,10 @@ bool PE::_parse_imports()
 		}
 
 		if (descriptor->OriginalFirstThunk != 0) {
-			ilt_offset = rva_to_offset(descriptor->OriginalFirstThunk);
+			ilt_offset = _rva_to_offset(descriptor->OriginalFirstThunk);
 		}
 		else { // Some packed executables use FirstThunk and set OriginalFirstThunk to 0.
-			ilt_offset = rva_to_offset(descriptor->FirstThunk);
+			ilt_offset = _rva_to_offset(descriptor->FirstThunk);
 		}
 
 		if (!_parse_import_lookup_table(ilt_offset, *it))
@@ -197,7 +197,7 @@ bool PE::_parse_delayed_imports()
         return true;
     }
 
-    unsigned int offset = rva_to_offset(dldt.Name);
+    unsigned int offset = _rva_to_offset(dldt.Name);
     if (offset == 0)
     {
         PRINT_WARNING << "Could not read the name of the DLL to be delay-loaded!" << std::endl;
@@ -213,7 +213,7 @@ bool PE::_parse_delayed_imports()
 	_delay_load_directory_table.reset(dldt);
 
 	// Read the imports
-	offset = rva_to_offset(dldt.DelayImportNameTable);
+	offset = _rva_to_offset(dldt.DelayImportNameTable);
 
 	if (_parse_import_lookup_table(offset, library)) {
 		_imports.push_back(library);
@@ -354,8 +354,7 @@ const_shared_strings PE::find_imports(const std::string& function_name_regexp,
 			else {
 				name = (*it2)->Name;
 			}
-			// Functions may be imported multiple times, don't add the same one twice.
-			if (boost::regex_match(name, e) && std::find(destination->begin(), destination->end(), name) == destination->end()) {
+			if (boost::regex_match(name, e)) {
 				destination->push_back(name);
 			}
 		}

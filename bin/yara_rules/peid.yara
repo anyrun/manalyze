@@ -1296,6 +1296,19 @@ condition:
 }
 
 
+rule Armadillo_v1_71
+{
+meta:
+    packer_name = "Armadillo v1.71"
+strings:
+    	$a0 = { 55 8B EC 6A FF 68 ?? ?? ?? ?? 68 ?? ?? ?? ?? 64 A1 }
+	$a1 = { 55 8B EC 6A FF 68 ?? ?? ?? ?? 68 ?? ?? ?? ?? 64 A1 }
+
+condition:
+    	$a0 at manape.ep or $a1
+}
+
+
 rule Xtreme_Protector_v1_06
 {
 meta:
@@ -5062,6 +5075,19 @@ strings:
 condition:
     	$a0 at manape.ep
 }
+
+
+rule PolyEnE_V0_01_____Lennart_Hedlund
+{
+meta:
+    packer_name = "PolyEnE V0.01+ -> Lennart Hedlund"
+strings:
+    	$a0 = { 50 6F 6C 79 45 6E 45 00 4D 65 73 73 61 67 65 42 6F 78 41 00 55 53 45 52 33 32 2E 64 6C 6C }
+
+condition:
+    	$a0
+}
+
 
 rule __PseudoSigner_0_2__MinGW_GCC_2_x______Anorganix
 {
