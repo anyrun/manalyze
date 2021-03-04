@@ -144,12 +144,6 @@ public:
 
 	// ----------------------------------------------------------------------------
 
-	DECLSPEC_MANACOMMONS void set_name(const std::string& name) {
-		_name->assign(name);
-	}
-
-	// ----------------------------------------------------------------------------
-
 	DECLSPEC_MANACOMMONS node_type get_type() const {
 		return _type;
 	}
@@ -207,7 +201,7 @@ public:
 	/**
 	 *	@brief	Returns the size of a LIST node.
 	 */
-	DECLSPEC_MANACOMMONS size_t size() const;
+	DECLSPEC_MANACOMMONS unsigned int size() const;
 
 	// ----------------------------------------------------------------------------
 
@@ -294,6 +288,6 @@ typedef boost::shared_ptr<nodes> pNodes;
 *
 *	@return	The maximum size of the children's names.
 */
-DECLSPEC_MANACOMMONS size_t determine_max_width(pNode node);
+DECLSPEC_MANACOMMONS unsigned int determine_max_width(pNode node);
 
 } // !namespace io

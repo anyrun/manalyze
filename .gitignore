@@ -67,8 +67,8 @@ Debug
 .idea
 
 # External projects
-external/yara
-external/hash-library
+#external/yara
+#external/hash-library
 
 # Sphinx build files
 docs/_*
@@ -79,7 +79,7 @@ docs/html
 resources/*
 
 # Third-party libraries
-external/
+#external/
 
 # Signing script
 bin/sign_all.bat

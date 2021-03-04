@@ -22,14 +22,14 @@ along with Manalyze.  If not, see <http://www.gnu.org/licenses/>.
 namespace io
 {
 
-size_t determine_max_width(pNode node)
+unsigned int determine_max_width(pNode node)
 {
 	if (node->get_type() != OutputTreeNode::LIST)
 	{
 		PRINT_WARNING << "[RawFormatter] Tried to get the maximum width, but is not a list of nodes!" << std::endl;
 		return 0;
 	}
-	size_t max = 0;
+	unsigned int max = 0;
 	pNodes children = node->get_children();
 	for (nodes::const_iterator it = children->begin() ; it != children->end() ; ++it)
 	{
@@ -105,23 +105,8 @@ pString OutputTreeNode::to_string() const
 	}
 
 	std::stringstream ss;
-	if (_modifier == HEX)
-	{
+	if (_modifier == HEX) {
 		ss << std::hex << "0x" << std::uppercase << std::setfill('0');
-        switch (_type)
-        {
-            case UINT32:
-                ss << std::setw(8);
-                break;
-            case UINT16:
-                ss << std::setw(4);
-                break;
-            case UINT64:
-                ss << std::setw(16);
-                break;
-            default:
-                break;
-        }
 	}
 	else if (_modifier == DEC) {
 		ss << std::dec;
@@ -130,13 +115,13 @@ pString OutputTreeNode::to_string() const
 	switch (_type)
 	{
 	case UINT32:
-		ss << **_uint32_data;
+		ss << std::setw(8) << **_uint32_data;
 		break;
 	case UINT16:
-		ss << **_uint16_data;
+		ss << std::setw(4) << **_uint16_data;
 		break;
 	case UINT64:
-		ss << **_uint64_data;
+		ss << std::setw(16) << **_uint64_data;
 		break;
 	case FLOAT:
 		ss << **_float_data;
@@ -208,24 +193,6 @@ void OutputTreeNode::append(pNode node)
 	if (!_list_data || !*_list_data) {
 		_list_data = boost::make_shared<boost::optional<nodes> >(nodes());
 	}
-
-	// The JSON formatter cannot handle identical names in a list. Rename duplicates if necessary.
-	int i = 2;
-	auto initial_name = *node->get_name();
-	auto current_name = initial_name;
-	for (auto it = (*_list_data)->begin() ; it != (*_list_data)->end() ; ++it)
-	{
-		if (*(*it)->get_name() == current_name)
-		{
-			std::stringstream ss;
-			ss << initial_name << " (#" << i++ << ")";
-			current_name = ss.str();
-		}
-	}
-	if (current_name != initial_name) {
-		node->set_name(current_name);
-	}
-
 	(*_list_data)->push_back(node);
 }
 
@@ -249,7 +216,7 @@ pNodes OutputTreeNode::get_children() const
 
 // ----------------------------------------------------------------------------
 
-size_t OutputTreeNode::size() const
+unsigned int OutputTreeNode::size() const
 {
 	if (_type != LIST)
 	{
